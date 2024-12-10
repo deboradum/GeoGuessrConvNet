@@ -37,8 +37,10 @@ def get_net():
 
 
 def train(
-    net, train_loader, test_loader, loss_fn, optimizer, epochs, device, scheduler=None
+    net, train_loader, test_loader, loss_fn, optimizer, epochs, device, filepath, patience, scheduler=None
 ):
+    min_test_loss = 99999
+    early_stopping_counter = 0
     for epoch in range(1, epochs+1):
         s = time.perf_counter()
         net.train()
@@ -72,9 +74,26 @@ def train(
         avg_train_loss, avg_train_acc = train_loss/len(train_loader.dataset), train_acc/len(train_loader.dataset)
         avg_test_loss, avg_test_acc = test_loss/len(test_loader.dataset), test_acc/len(test_loader.dataset)
 
+        if scheduler:
+            scheduler.step()
+
         print(
             f"Epoch: {epoch} | train loss: {avg_train_loss:.2f} | train acc: {avg_train_acc:.2f} | test loss: {avg_test_loss:.2f} |  test acc: {avg_test_acc:.2f} | Took {time_taken:.2f} seconds"
         )
+        with open(filepath, "a+") as f:
+            f.write(f"{epoch},{avg_train_loss},{avg_train_acc},{avg_test_loss},{avg_test_acc}")
+
+        # Early stopping
+        if avg_test_loss < min_test_loss:
+            min_test_loss = avg_test_loss
+            early_stopping_counter = 0
+        else:
+            early_stopping_counter += 1
+            if early_stopping_counter >= patience:
+                return min_test_loss
+
+    return min_test_loss
+
 
 if __name__ == "__main__":
     torch.manual_seed(101)
@@ -92,6 +111,8 @@ if __name__ == "__main__":
         lr=lr,
         weight_decay=weight_decay
     )
+    filepath = f"lr_{lr}_wd_{weight_decay}_.csv"
+    scheduler = torch.optim.StepLR(optimizer, step_size=10, gamma=0.1)
 
     train(
         net=net,
@@ -99,7 +120,9 @@ if __name__ == "__main__":
         test_loader=test_loader,
         loss_fn=criterion,
         optimizer=optimizer,
-        epochs=100,
+        epochs=25,
         device=device,
+        filepath=filepath,
+        patience=3,
         scheduler=None,
     )
