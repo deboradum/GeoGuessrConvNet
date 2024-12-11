@@ -1,5 +1,6 @@
 import time
 import torch
+import optuna
 import torchvision
 from torchvision import transforms, datasets
 from torch.utils.data import random_split, DataLoader
@@ -29,7 +30,8 @@ def get_dataloaders(root_dir="dataset/", batch_size=16):
 
 
 def get_net():
-    net = torchvision.models.resnet50()
+    weights = torchvision.models.ResNet50_Weights.DEFAULT
+    net = torchvision.models.resnet50(weights=weights)
     net.fc = torch.nn.Linear(net.fc.in_features, NUM_STATES)
     torch.nn.init.xavier_uniform_(net.fc.weight)
 
@@ -81,7 +83,7 @@ def train(
             f"Epoch: {epoch} | train loss: {avg_train_loss:.2f} | train acc: {avg_train_acc:.2f} | test loss: {avg_test_loss:.2f} |  test acc: {avg_test_acc:.2f} | Took {time_taken:.2f} seconds"
         )
         with open(filepath, "a+") as f:
-            f.write(f"{epoch},{avg_train_loss},{avg_train_acc},{avg_test_loss},{avg_test_acc}")
+            f.write(f"{epoch},{avg_train_loss},{avg_train_acc},{avg_test_loss},{avg_test_acc}\n")
 
         # Early stopping
         if avg_test_loss < min_test_loss:
@@ -95,10 +97,24 @@ def train(
     return min_test_loss
 
 
-if __name__ == "__main__":
-    torch.manual_seed(101)
+def objective(trial):
+    lr = trial.suggest_float("lr", 1e-6, 1e-4, log=True)
+    weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-4, log=True)
+    use_scheduler = trial.suggest_categorical("use_scheduler", [True, False])
+    scheduler_step_size = (
+        trial.suggest_int("scheduler_step_size", 5, 20) if use_scheduler else 0
+    )
+    scheduler_gamma = (
+        trial.suggest_uniform("scheduler_gamma", 0.1, 0.9) if use_scheduler else 0
+    )
 
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        "mps"
+        if torch.backends.mps.is_available()
+        else "cuda"
+        if torch.cuda.is_available()
+        else "cpu"
+    )
     train_loader, test_loader = get_dataloaders(root_dir="dataset/", batch_size=8)
     net = get_net().to(device)
     criterion = torch.nn.CrossEntropyLoss()
@@ -107,14 +123,18 @@ if __name__ == "__main__":
         param for name, param in net.named_parameters() if "fc" not in str(name)
     ]
     optimizer = torch.optim.Adam(
-        [{'params':params_1x}, {'params': net.fc.parameters(), 'lr': lr*10}],
+        [{"params": params_1x}, {"params": net.fc.parameters(), "lr": lr * 10}],
         lr=lr,
-        weight_decay=weight_decay
+        weight_decay=weight_decay,
     )
-    filepath = f"lr_{lr}_wd_{weight_decay}_.csv"
-    scheduler = torch.optim.StepLR(optimizer, step_size=10, gamma=0.1)
+    filepath = f"lr_{lr}_wd_{weight_decay}_scheduler_{use_scheduler}_stepsize_{scheduler_step_size}_gamma_{scheduler_gamma}.csv"
+    scheduler = None
+    if use_scheduler:
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer, step_size=scheduler_step_size, gamma=scheduler_gamma
+        )
 
-    train(
+    test_loss = train(
         net=net,
         train_loader=train_loader,
         test_loader=test_loader,
@@ -124,5 +144,20 @@ if __name__ == "__main__":
         device=device,
         filepath=filepath,
         patience=3,
-        scheduler=None,
+        scheduler=scheduler,
     )
+
+    return test_loss
+
+
+if __name__ == "__main__":
+    torch.manual_seed(101)
+
+    study = optuna.create_study(direction="minimize")
+    study.optimize(objective, n_trials=50)
+    print("Best trial:")
+    trial = study.best_trial
+    print(f"  Value (test loss): {trial.value}")
+    print("  Params:")
+    for key, value in trial.params.items():
+        print(f"    {key}: {value}")
