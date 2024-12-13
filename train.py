@@ -7,24 +7,35 @@ from torch.utils.data import random_split, DataLoader
 
 NUM_STATES = 51
 
+def is_valid(path):
+    return path.endswith(".png")
+
 def get_dataloaders(root_dir="dataset/", batch_size=16):
     dataset = datasets.ImageFolder(
         root=root_dir,
         transform=transforms.Compose(
             [
+                transforms.RandomCrop(
+                    (448, 448),
+                ),
                 transforms.Resize((224, 224)),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
             ]
         ),
+        is_valid_file=is_valid,
     )
 
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=4
+    )
+    test_loader = DataLoader(
+        test_dataset, batch_size=batch_size, shuffle=False, num_workers=4,
+    )
 
     return train_loader, test_loader
 
@@ -48,7 +59,7 @@ def train(
         net.train()
         train_loss = 0.0
         train_acc = 0.0
-        for X, y in train_loader:
+        for i, (X, y) in enumerate(train_loader):
             X, y = X.to(device), y.to(device)
             outputs = net(X)
             loss = loss_fn(outputs, y)
@@ -64,7 +75,7 @@ def train(
         test_loss = 0.0
         test_acc = 0.0
         with torch.no_grad():
-            for X, y in test_loader:
+            for i, (X, y) in enumerate(test_loader):
                 X, y = X.to(device), y.to(device)
                 outputs = net(X)
                 loss = loss_fn(outputs, y)
@@ -105,7 +116,7 @@ def objective(trial):
         trial.suggest_int("scheduler_step_size", 5, 20) if use_scheduler else 0
     )
     scheduler_gamma = (
-        trial.suggest_uniform("scheduler_gamma", 0.1, 0.9) if use_scheduler else 0
+        trial.suggest_float("scheduler_gamma", 0.1, 0.9) if use_scheduler else 0
     )
 
     device = torch.device(
@@ -115,7 +126,7 @@ def objective(trial):
         if torch.cuda.is_available()
         else "cpu"
     )
-    train_loader, test_loader = get_dataloaders(root_dir="dataset/", batch_size=8)
+    train_loader, test_loader = get_dataloaders(root_dir="countryDataset/", batch_size=64)
     net = get_net().to(device)
     criterion = torch.nn.CrossEntropyLoss()
     lr, weight_decay = 1e-5, 5e-4
