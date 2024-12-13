@@ -5,7 +5,6 @@ import torchvision
 from torchvision import transforms, datasets
 from torch.utils.data import random_split, DataLoader
 
-NUM_STATES = 51
 
 def is_valid(path):
     return path.endswith(".png")
@@ -37,16 +36,36 @@ def get_dataloaders(root_dir="dataset/", batch_size=16):
         test_dataset, batch_size=batch_size, shuffle=False, num_workers=4,
     )
 
-    return train_loader, test_loader
+    return train_loader, test_loader, len(dataset.classes)
 
 
-def get_net():
+def get_net(num_classes):
     weights = torchvision.models.ResNet50_Weights.DEFAULT
     net = torchvision.models.resnet50(weights=weights)
-    net.fc = torch.nn.Linear(net.fc.in_features, NUM_STATES)
+    net.fc = torch.nn.Linear(net.fc.in_features, num_classes)
     torch.nn.init.xavier_uniform_(net.fc.weight)
 
     return net
+
+
+def correct_predictions(output, target, topk=(1,)):
+    maxk = max(topk)
+
+    _, pred = output.topk(maxk, dim=1, largest=True, sorted=True)
+
+    pred = pred.t()
+    correct = pred.eq(
+        target.view(1, -1).expand_as(pred)
+    )
+
+    ret = []
+    for k in topk:
+        # Number of correct outputs is normalized later to get accuracy.
+        correct_k = (
+            correct[:k].reshape(-1).float().sum(0, keepdim=True)
+        )
+        ret.append(correct_k)
+    return ret
 
 
 def train(
@@ -58,7 +77,9 @@ def train(
         s = time.perf_counter()
         net.train()
         train_loss = 0.0
-        train_acc = 0.0
+        train_acc_top1 = 0.0
+        train_acc_top3 = 0.0
+        train_acc_top5 = 0.0
         for i, (X, y) in enumerate(train_loader):
             X, y = X.to(device), y.to(device)
             outputs = net(X)
@@ -69,11 +90,16 @@ def train(
             optimizer.step()
 
             train_loss += loss.item() * X.size(0)
-            train_acc += (torch.argmax(outputs, dim=1) == y).sum().item()
+            top1_acc, top3_acc, top5_acc = correct_predictions(outputs, y, (1, 3, 5))
+            train_acc_top1 += top1_acc.item()
+            train_acc_top3 += top3_acc.item()
+            train_acc_top5 += top5_acc.item()
 
         net.eval()
         test_loss = 0.0
-        test_acc = 0.0
+        test_acc_top1 = 0.0
+        test_acc_top3 = 0.0
+        test_acc_top5 = 0.0
         with torch.no_grad():
             for i, (X, y) in enumerate(test_loader):
                 X, y = X.to(device), y.to(device)
@@ -81,20 +107,35 @@ def train(
                 loss = loss_fn(outputs, y)
 
                 test_loss += loss.item() * X.size(0)
-                test_acc += (torch.argmax(outputs, dim=1) == y).sum().item()
+                top1_acc, top3_acc, top5_acc = correct_predictions(outputs, y, (1, 3, 5))
+                test_acc_top1 += top1_acc.item()
+                test_acc_top3 += top3_acc.item()
+                test_acc_top5 += top5_acc.item()
 
         time_taken = round(time.perf_counter()-s, 3)
-        avg_train_loss, avg_train_acc = train_loss/len(train_loader.dataset), train_acc/len(train_loader.dataset)
-        avg_test_loss, avg_test_acc = test_loss/len(test_loader.dataset), test_acc/len(test_loader.dataset)
+        avg_train_loss = train_loss/len(train_loader.dataset)
+        avg_train_acc_top1, avg_train_acc_top3, avg_train_acc_top5 = (
+            train_acc_top1 / len(train_loader.dataset),
+            train_acc_top3 / len(train_loader.dataset),
+            train_acc_top5 / len(train_loader.dataset),
+        )
+        avg_test_loss  = test_loss/len(test_loader.dataset)
+        avg_test_acc_top1, avg_test_acc_top3, avg_test_acc_top5 = (
+            test_acc_top1 / len(test_loader.dataset),
+            test_acc_top3 / len(test_loader.dataset),
+            test_acc_top5 / len(test_loader.dataset),
+        )
 
         if scheduler:
             scheduler.step()
 
         print(
-            f"Epoch: {epoch} | train loss: {avg_train_loss:.2f} | train acc: {avg_train_acc:.2f} | test loss: {avg_test_loss:.2f} |  test acc: {avg_test_acc:.2f} | Took {time_taken:.2f} seconds"
+            f"Epoch: {epoch} | train loss: {avg_train_loss:.2f} | top 1 train acc: {avg_train_acc_top1:.2f} | top 3 train acc: {avg_train_acc_top3:.2f} | top 5 train acc: {avg_train_acc_top5:.2f} | test loss: {avg_test_loss:.2f} |  top 1 test acc: {avg_test_acc_top1:.2f} |  top 3 test acc: {avg_test_acc_top3:.2f} |  top 5 test acc: {avg_test_acc_top5:.2f} | Took {time_taken:.2f} seconds"
         )
         with open(filepath, "a+") as f:
-            f.write(f"{epoch},{avg_train_loss},{avg_train_acc},{avg_test_loss},{avg_test_acc}\n")
+            f.write(
+                f"{epoch},{avg_train_loss},{avg_train_acc_top1},{avg_train_acc_top3},{avg_train_acc_top5},{avg_test_loss},{avg_test_acc_top1},{avg_test_acc_top3},{avg_test_acc_top5}\n"
+            )
 
         # Early stopping
         if avg_test_loss < min_test_loss:
@@ -126,8 +167,10 @@ def objective(trial):
         if torch.cuda.is_available()
         else "cpu"
     )
-    train_loader, test_loader = get_dataloaders(root_dir="countryDataset/", batch_size=64)
-    net = get_net().to(device)
+    train_loader, test_loader, num_classes = get_dataloaders(
+        root_dir="countryDataset/", batch_size=64
+    )
+    net = get_net(num_classes).to(device)
     criterion = torch.nn.CrossEntropyLoss()
     lr, weight_decay = 1e-5, 5e-4
     params_1x = [
