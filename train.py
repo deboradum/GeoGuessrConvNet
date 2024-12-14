@@ -150,7 +150,7 @@ def train(
 
 
 def objective(trial):
-    lr = trial.suggest_float("lr", 1e-6, 1e-4, log=True)
+    lr = 5.271243178881065e-5
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-4, log=True)
     use_scheduler = trial.suggest_categorical("use_scheduler", [True, False])
     scheduler_step_size = (
@@ -172,7 +172,6 @@ def objective(trial):
     )
     net = get_net(num_classes).to(device)
     criterion = torch.nn.CrossEntropyLoss()
-    lr, weight_decay = 1e-5, 5e-4
     params_1x = [
         param for name, param in net.named_parameters() if "fc" not in str(name)
     ]
@@ -205,7 +204,7 @@ def objective(trial):
 
 
 if __name__ == "__main__":
-    torch.manual_seed(101)
+    torch.manual_seed(73816)
 
     study = optuna.create_study(direction="minimize")
     study.optimize(objective, n_trials=50)
