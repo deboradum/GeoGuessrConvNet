@@ -39,11 +39,14 @@ def get_dataloaders(root_dir="dataset/", batch_size=16):
     return train_loader, test_loader, len(dataset.classes)
 
 
-def get_net(num_classes):
+def get_net(num_classes, dropout_rate=0.5):
     weights = torchvision.models.ResNet50_Weights.DEFAULT
     net = torchvision.models.resnet50(weights=weights)
-    net.fc = torch.nn.Linear(net.fc.in_features, num_classes)
-    torch.nn.init.xavier_uniform_(net.fc.weight)
+    net.fc = torch.nn.Sequential(
+        torch.nn.Dropout(dropout_rate),
+        torch.nn.Linear(net.fc.in_features, num_classes),
+    )
+    torch.nn.init.xavier_uniform_(net.fc[1].weight)
 
     return net
 
@@ -151,6 +154,7 @@ def train(
 
 def objective(trial):
     lr = 5.271243178881065e-5
+    dropout_rate = trial.suggest_float("dropout_rate", 0.25, 0.65)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-4, log=True)
     use_scheduler = trial.suggest_categorical("use_scheduler", [True, False])
     scheduler_step_size = (
@@ -170,7 +174,7 @@ def objective(trial):
     train_loader, test_loader, num_classes = get_dataloaders(
         root_dir="countryDataset/", batch_size=64
     )
-    net = get_net(num_classes).to(device)
+    net = get_net(num_classes, dropout_rate).to(device)
     criterion = torch.nn.CrossEntropyLoss()
     params_1x = [
         param for name, param in net.named_parameters() if "fc" not in str(name)
@@ -180,7 +184,7 @@ def objective(trial):
         lr=lr,
         weight_decay=weight_decay,
     )
-    filepath = f"lr_{lr}_wd_{weight_decay}_scheduler_{use_scheduler}_stepsize_{scheduler_step_size}_gamma_{scheduler_gamma}.csv"
+    filepath = f"lr_{lr}_wd_{weight_decay}_scheduler_{use_scheduler}_stepsize_{scheduler_step_size}_gamma_{scheduler_gamma}_dropout_{dropout_rate}.csv"
     scheduler = None
     if use_scheduler:
         scheduler = torch.optim.lr_scheduler.StepLR(
