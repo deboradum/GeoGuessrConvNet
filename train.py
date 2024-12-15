@@ -1,17 +1,30 @@
 import time
 import torch
-import optuna
 import torchvision
 from torchvision import transforms, datasets
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import DataLoader
 
 
 def is_valid(path):
     return path.endswith(".png")
 
 def get_dataloaders(root_dir="dataset/", batch_size=16):
-    dataset = datasets.ImageFolder(
-        root=root_dir,
+    train_dataset = datasets.ImageFolder(
+        root=f"{root_dir}/train/",
+        transform=transforms.Compose(
+            [
+                transforms.RandomCrop(
+                    (448, 448),
+                ),
+                transforms.Resize((224, 224)),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+            ]
+        ),
+        is_valid_file=is_valid,
+    )
+    test_dataset = datasets.ImageFolder(
+        root=f"{root_dir}/test/",
         transform=transforms.Compose(
             [
                 transforms.RandomCrop(
@@ -25,10 +38,6 @@ def get_dataloaders(root_dir="dataset/", batch_size=16):
         is_valid_file=is_valid,
     )
 
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-
     train_loader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=4
     )
@@ -36,12 +45,31 @@ def get_dataloaders(root_dir="dataset/", batch_size=16):
         test_dataset, batch_size=batch_size, shuffle=False, num_workers=4,
     )
 
-    return train_loader, test_loader, len(dataset.classes)
+    return train_loader, test_loader, len(train_dataset.classes)
 
 
-def get_net(num_classes, dropout_rate=0.5):
-    weights = torchvision.models.ResNet50_Weights.DEFAULT
-    net = torchvision.models.resnet50(weights=weights)
+def get_net(num_classes, resnet="resnet50", dropout_rate=0.5):
+    if resnet=="resnet18":
+        weights = torchvision.models.ResNet18_Weights.DEFAULT
+        resnet_model = torchvision.models.resnet18
+    elif resnet=="resnet34":
+        weights = torchvision.models.ResNet34_Weights.DEFAULT
+        resnet_model = torchvision.models.resnet34
+    elif resnet=="resnet50":
+        weights = torchvision.models.ResNet50_Weights.DEFAULT
+        resnet_model = torchvision.models.resnet50
+    elif resnet=="resnet101":
+        weights = torchvision.models.ResNet101_Weights.DEFAULT
+        resnet_model = torchvision.models.resnet101
+    elif resnet=="resnet152":
+        weights = torchvision.models.ResNet152_Weights.DEFAULT
+        resnet_model = torchvision.models.resnet152
+    else:
+        print(f"{resnet} not supported")
+        exit(0)
+
+    net = resnet_model(weights=weights)
+
     net.fc = torch.nn.Sequential(
         torch.nn.Dropout(dropout_rate),
         torch.nn.Linear(net.fc.in_features, num_classes),
@@ -152,17 +180,15 @@ def train(
     return min_test_loss
 
 
-def objective(trial):
+if __name__ == "__main__":
+    torch.manual_seed(4214)
     lr = 5.271243178881065e-5
-    dropout_rate = trial.suggest_float("dropout_rate", 0.25, 0.65)
-    weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-4, log=True)
-    use_scheduler = trial.suggest_categorical("use_scheduler", [True, False])
-    scheduler_step_size = (
-        trial.suggest_int("scheduler_step_size", 5, 20) if use_scheduler else 0
-    )
-    scheduler_gamma = (
-        trial.suggest_float("scheduler_gamma", 0.1, 0.9) if use_scheduler else 0
-    )
+    dropout_rate = 0
+    weight_decay = 0
+    scheduler_step_size = 0
+    scheduler_gamma = 0
+    resnet = "resnet50"
+
 
     device = torch.device(
         "mps"
@@ -172,9 +198,10 @@ def objective(trial):
         else "cpu"
     )
     train_loader, test_loader, num_classes = get_dataloaders(
-        root_dir="countryDataset/", batch_size=64
+        root_dir="countryDataset/", batch_size=256
     )
-    net = get_net(num_classes, dropout_rate).to(device)
+
+    net = get_net(num_classes, resnet=resnet, dropout_rate=dropout_rate).to(device)
     criterion = torch.nn.CrossEntropyLoss()
     params_1x = [
         param for name, param in net.named_parameters() if "fc" not in str(name)
@@ -184,12 +211,10 @@ def objective(trial):
         lr=lr,
         weight_decay=weight_decay,
     )
-    filepath = f"lr_{lr}_wd_{weight_decay}_scheduler_{use_scheduler}_stepsize_{scheduler_step_size}_gamma_{scheduler_gamma}_dropout_{dropout_rate}.csv"
-    scheduler = None
-    if use_scheduler:
-        scheduler = torch.optim.lr_scheduler.StepLR(
-            optimizer, step_size=scheduler_step_size, gamma=scheduler_gamma
-        )
+    filepath = f"{resnet}_lr_{lr}_wd_{weight_decay}_stepsize_{scheduler_step_size}_gamma_{scheduler_gamma}_dropout_{dropout_rate}.csv"
+    scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer, step_size=scheduler_step_size, gamma=scheduler_gamma
+    )
 
     test_loss = train(
         net=net,
@@ -203,18 +228,3 @@ def objective(trial):
         patience=3,
         scheduler=scheduler,
     )
-
-    return test_loss
-
-
-if __name__ == "__main__":
-    torch.manual_seed(73816)
-
-    study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=50)
-    print("Best trial:")
-    trial = study.best_trial
-    print(f"  Value (test loss): {trial.value}")
-    print("  Params:")
-    for key, value in trial.params.items():
-        print(f"    {key}: {value}")
