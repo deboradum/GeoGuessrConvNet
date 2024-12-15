@@ -172,23 +172,25 @@ def train(
         if avg_test_loss < min_test_loss:
             min_test_loss = avg_test_loss
             early_stopping_counter = 0
+            best_state_dict = net.state_dict()
         else:
             early_stopping_counter += 1
             if early_stopping_counter >= patience:
+                torch.save(best_state_dict, filepath.replace(".csv", ".pth"))
                 return min_test_loss
 
+    torch.save(net.state_dict(), filepath.replace(".csv", ".pth"))
     return min_test_loss
 
 
 if __name__ == "__main__":
     torch.manual_seed(4214)
     lr = 5.271243178881065e-5
-    dropout_rate = 0
-    weight_decay = 0
-    scheduler_step_size = 0
-    scheduler_gamma = 0
+    dropout_rate = 0.4
+    weight_decay = 1.9967021251960164e-6
+    scheduler_step_size = 5
+    scheduler_gamma = 0.8145093310551305
     resnet = "resnet50"
-
 
     device = torch.device(
         "mps"
@@ -197,8 +199,9 @@ if __name__ == "__main__":
         if torch.cuda.is_available()
         else "cpu"
     )
+
     train_loader, test_loader, num_classes = get_dataloaders(
-        root_dir="countryDataset/", batch_size=256
+        root_dir="countryDataset/", batch_size=64
     )
 
     net = get_net(num_classes, resnet=resnet, dropout_rate=dropout_rate).to(device)
