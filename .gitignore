@@ -1,5 +1,8 @@
 dataset/
+__pycache__/
+
 
 *.png
+*.csv
 
 .DS_Store
