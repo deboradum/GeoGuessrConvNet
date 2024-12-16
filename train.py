@@ -9,6 +9,9 @@ def is_valid(path):
     return path.endswith(".png")
 
 def get_dataloaders(root_dir="dataset/", batch_size=16):
+    imagenet_mean = [0.485, 0.456, 0.406]
+    imagenet_std = [0.229, 0.224, 0.225]
+
     train_dataset = datasets.ImageFolder(
         root=f"{root_dir}/train/",
         transform=transforms.Compose(
@@ -19,6 +22,7 @@ def get_dataloaders(root_dir="dataset/", batch_size=16):
                 transforms.Resize((224, 224)),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
+                transforms.Normalize(mean=imagenet_mean, std=imagenet_std),
             ]
         ),
         is_valid_file=is_valid,
@@ -33,6 +37,7 @@ def get_dataloaders(root_dir="dataset/", batch_size=16):
                 transforms.Resize((224, 224)),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
+                transforms.Normalize(mean=imagenet_mean, std=imagenet_std),
             ]
         ),
         is_valid_file=is_valid,
