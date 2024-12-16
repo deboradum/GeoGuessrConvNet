@@ -1,12 +1,15 @@
 import os
+import umap
 import torch
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from sklearn.manifold import TSNE
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics import classification_report, confusion_matrix
 from train import get_dataloaders, get_net
-from sklearn.metrics import classification_report
 
 
 def create_prediction_figure(image, guess, ground_truth, output_path):
@@ -64,6 +67,114 @@ def get_accuracies(net, dataloader, output_path):
     report_df = pd.DataFrame(report_dict).transpose()
     report_df.to_csv(output_path, index=True)
 
+    cm = confusion_matrix(all_ground_truth, all_predictions)
+
+    return cm, classes
+
+
+def plot_tsne_umap(cm, classes, base_output_path):
+    # Normalize the confusion matrix by row to get similarity scores
+    cm_normalized = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
+
+    # t-SNE
+    tsne = TSNE(n_components=2, random_state=42, perplexity=30, n_iter=300)
+    tsne_embeddings = tsne.fit_transform(cm_normalized)
+
+    # UMAP
+    umap_model = umap.UMAP(n_neighbors=15, random_state=42)
+    umap_embeddings = umap_model.fit_transform(cm_normalized)
+
+    # Cosine similarity t-SNE
+    cosine_sim = cosine_similarity(cm_normalized)  # Compute cosine similarity
+    tsne_cosine = TSNE(n_components=2, random_state=42, perplexity=30, n_iter=300)
+    cosine_embeddings = tsne_cosine.fit_transform(cosine_sim)
+
+    # Cosine Similarity UMAP
+    umap_cosine = umap.UMAP(n_neighbors=15, random_state=42)
+    cosine_embeddings_umap = umap_cosine.fit_transform(cosine_sim)
+
+    #  t-SNE
+    plt.figure(figsize=(10, 8))
+    plt.scatter(
+        tsne_embeddings[:, 0],
+        tsne_embeddings[:, 1],
+        c=np.arange(len(classes)),
+        cmap="tab20",
+        edgecolor="k",
+        s=100,
+    )
+    plt.title("t-SNE class confusion visualization")
+    plt.xlabel("Dimension 1")
+    plt.ylabel("Dimension 2")
+    for i, label in enumerate(classes):
+        plt.annotate(label, (tsne_embeddings[i, 0], tsne_embeddings[i, 1]), fontsize=8)
+    tsne_output_path = f"{base_output_path}_TSNE.png"
+    plt.savefig(tsne_output_path, bbox_inches="tight")
+    plt.close()
+
+    # UMAP
+    plt.figure(figsize=(10, 8))
+    plt.scatter(
+        umap_embeddings[:, 0],
+        umap_embeddings[:, 1],
+        c=np.arange(len(classes)),
+        cmap="tab20",
+        edgecolor="k",
+        s=100,
+    )
+    plt.title("UMAP class confusion visualization")
+    plt.xlabel("Dimension 1")
+    plt.ylabel("Dimension 2")
+    for i, label in enumerate(classes):
+        plt.annotate(label, (umap_embeddings[i, 0], umap_embeddings[i, 1]), fontsize=8)
+    umap_output_path = f"{base_output_path}_UMAP.png"
+    plt.savefig(umap_output_path, bbox_inches="tight")
+    plt.close()
+
+    # Cosine Similarity t-SNE Plot
+    plt.figure(figsize=(10, 8))
+    plt.scatter(
+        cosine_embeddings[:, 0],
+        cosine_embeddings[:, 1],
+        c=np.arange(len(classes)),
+        cmap="tab20",
+        edgecolor="k",
+        s=100,
+    )
+    plt.title("t-SNE cosine similarity visualization")
+    plt.xlabel("Dimension 1")
+    plt.ylabel("Dimension 2")
+    for i, label in enumerate(classes):
+        plt.annotate(
+            label, (cosine_embeddings[i, 0], cosine_embeddings[i, 1]), fontsize=8
+        )
+    cosine_output_path = f"{base_output_path}_Cosine_TSNE.png"
+    plt.savefig(cosine_output_path, bbox_inches="tight")
+    plt.close()
+
+    # Cosine Similarity UMAP Plot
+    plt.figure(figsize=(10, 8))
+    plt.scatter(
+        cosine_embeddings_umap[:, 0],
+        cosine_embeddings_umap[:, 1],
+        c=np.arange(len(classes)),
+        cmap="tab20",
+        edgecolor="k",
+        s=100,
+    )
+    plt.title("UMAP cosine similarity visualization")
+    plt.xlabel("Dimension 1")
+    plt.ylabel("Dimension 2")
+    for i, label in enumerate(classes):
+        plt.annotate(
+            label,
+            (cosine_embeddings_umap[i, 0], cosine_embeddings_umap[i, 1]),
+            fontsize=8,
+        )
+    cosine_umap_output_path = f"{base_output_path}_Cosine_UMAP.png"
+    plt.savefig(cosine_umap_output_path, bbox_inches="tight")
+    plt.close()
+
 
 if __name__ == "__main__":
     pretrained_path = "resnet101_lr_5.271243178881065e-05_wd_1.9967021251960164e-06_stepsize_5_gamma_0.8145093310551305_dropout_0.4.pth"
@@ -77,5 +188,11 @@ if __name__ == "__main__":
     net.load_state_dict(torch.load(pretrained_path, weights_only=True))
     net.eval()
 
+    # Visualize images and predictions
     visualize_predictions(net, test_loader, f"{resnet}_results")
-    get_accuracies(net, test_loader, f"{resnet}_results.csv")
+
+    # Get accuracies in csv format
+    cm, classes = get_accuracies(net, test_loader, f"{resnet}_results.csv")
+
+    # Plot accuracies with tsne and umap
+    plot_tsne_umap(cm, classes, f"{resnet}_class_confusions")
