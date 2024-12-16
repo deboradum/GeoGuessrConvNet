@@ -10,8 +10,22 @@ def is_valid(path):
     return path.endswith(".png")
 
 def get_dataloaders(root_dir="dataset/", batch_size=16):
-    dataset = datasets.ImageFolder(
-        root=root_dir,
+    train_dataset = datasets.ImageFolder(
+        root=f"{root_dir}/train/",
+        transform=transforms.Compose(
+            [
+                transforms.RandomCrop(
+                    (448, 448),
+                ),
+                transforms.Resize((224, 224)),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+            ]
+        ),
+        is_valid_file=is_valid,
+    )
+    test_dataset = datasets.ImageFolder(
+        root=f"{root_dir}/test/",
         transform=transforms.Compose(
             [
                 transforms.RandomCrop(
@@ -25,18 +39,17 @@ def get_dataloaders(root_dir="dataset/", batch_size=16):
         is_valid_file=is_valid,
     )
 
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-
     train_loader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=4
     )
     test_loader = DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False, num_workers=4,
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
     )
 
-    return train_loader, test_loader, len(dataset.classes)
+    return train_loader, test_loader, len(train_dataset.classes)
 
 
 def get_net(num_classes, resnet="resnet50", dropout_rate=0.5):
@@ -174,7 +187,7 @@ def train(
 
 
 def objective(trial):
-    resnet = "resnet152"
+    resnet = "resnet34"
     lr = 5.271243178881065e-5
     dropout_rate = trial.suggest_float("dropout_rate", 0.25, 0.65)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-4, log=True)
