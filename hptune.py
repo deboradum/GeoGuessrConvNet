@@ -3,7 +3,7 @@ import torch
 import optuna
 import torchvision
 from torchvision import transforms, datasets
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import DataLoader
 
 
 def is_valid(path):
