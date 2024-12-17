@@ -4,14 +4,9 @@ import matplotlib.pyplot as plt
 def plot(paths, plot_train=True):
     # Initialize lists to hold metrics for each path
     epochs = []
-    train_losses = []
-    test_losses = []
-    train_acc_top1 = []
-    test_acc_top1 = []
-    train_acc_top3 = []
-    test_acc_top3 = []
-    train_acc_top5 = []
-    test_acc_top5 = []
+    train_losses, test_losses = [], []
+    train_acc_top1, train_acc_top3, train_acc_top5 = [], [], []
+    test_acc_top1, test_acc_top3, test_acc_top5 = [], [], []
 
     # Parse data from each file
     for path in paths:
@@ -54,54 +49,49 @@ def plot(paths, plot_train=True):
         train_acc_top5.append(acc_train5)
         test_acc_top5.append(acc_test5)
 
-    # Create subplots
-    fig, axes = plt.subplots(4, 1, figsize=(10, 15), sharex=True)
     metrics = [
-        (train_losses, test_losses, "Loss"),
-        (train_acc_top1, test_acc_top1, "Accuracy Top-1"),
-        (train_acc_top3, test_acc_top3, "Accuracy Top-3"),
-        (train_acc_top5, test_acc_top5, "Accuracy Top-5"),
+        (train_losses, test_losses, "Loss", "loss_plot.png"),
+        (train_acc_top1, test_acc_top1, "Top-1 accuracy", "accuracy_top1_plot.png"),
+        (train_acc_top3, test_acc_top3, "Top-3 accuracy", "accuracy_top3_plot.png"),
+        (train_acc_top5, test_acc_top5, "Top-5 accuracy", "accuracy_top5_plot.png"),
     ]
 
     # Define colors for each path
     colors = plt.cm.tab10(range(len(paths)))
 
-
-    # Plot each metric
-    for i, (train, test, title) in enumerate(metrics):
-        ax = axes[i]
+    # Generate and save each plot
+    for train, test, title, filename in metrics:
+        plt.figure(figsize=(10, 5))
         for j, (epoch, train_vals, test_vals) in enumerate(zip(epochs, train, test)):
-            label = paths[j]
+            label = paths[j].split("_")[0].split("/")[-1]
             if plot_train:
-                ax.plot(
+                plt.plot(
                     epoch,
                     train_vals,
-                    label=f"Train - {label}",
+                    label=f"Train {label}",
                     color=colors[j],
                 )
-            ax.plot(
+            plt.plot(
                 epoch,
                 test_vals,
-                label=f"Test - {label}",
+                label=f"{label}",
                 color=colors[j],
                 linestyle="--",
             )
-        ax.set_title(title)
-        ax.set_ylabel(title)
-        ax.legend()
-        ax.grid()
-
-    axes[-1].set_xlabel("Epoch")
-
-    plt.tight_layout()
-    plt.show()
+        plt.title(title)
+        plt.xlabel("Epoch")
+        plt.ylabel(title)
+        plt.legend()
+        plt.grid()
+        plt.tight_layout()
+        plt.savefig(filename)
+        plt.close()
 
 
 paths = [
-    "lr_3.551149703221821e-05_wd_3.50789550172109e-05_scheduler_False_stepsize_0_gamma_0.csv",
-    "lr_3.64948994387593e-05_wd_2.3583623069232676e-06_scheduler_False_stepsize_0_gamma_0.csv",
-    "lr_4.6665284807168925e-05_wd_5.411810799060977e-06_scheduler_False_stepsize_0_gamma_0.csv",
-    "lr_4.871185119221744e-06_wd_1.1482078272972141e-06_scheduler_True_stepsize_19_gamma_0.8847210406663705.csv",
-    "lr_5.271243178881065e-05_wd_1.0584920651159921e-05_scheduler_True_stepsize_11_gamma_0.14202500516101513.csv",
+    "results/resnet34_results/resnet34_lr_5.271243178881065e-05_wd_1.9967021251960164e-06_stepsize_5_gamma_0.8145093310551305_dropout_0.4.csv",
+    "results/resnet50_results/resnet50_lr_5.271243178881065e-05_wd_1.9967021251960164e-06_stepsize_5_gamma_0.8145093310551305_dropout_0.4.csv",
+    "results/resnet101_results/resnet101_lr_5.271243178881065e-05_wd_1.9967021251960164e-06_stepsize_5_gamma_0.8145093310551305_dropout_0.4.csv",
+    "results/resnet152_results/resnet152_lr_5.271243178881065e-05_wd_1.9967021251960164e-06_stepsize_5_gamma_0.8145093310551305_dropout_0.4.csv",
 ]
 plot(paths, plot_train=False)
