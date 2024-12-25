@@ -1,11 +1,62 @@
 import os
 import time
+import hashlib
 import pyautogui
 from PIL import ImageGrab
 
+# Home1 screen
 MAP_X, MAP_Y = 1779, -183
 GUESS_X, GUESS_Y = 1789, -40
 CENTER_X, CENTER_Y = 801, -634
+
+
+def file_hash(filepath):
+    hasher = hashlib.md5()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def get_image_hashes(directory, extensions=None):
+    if extensions is None:
+        extensions = [".jpg", ".jpeg", ".png"]
+
+    hashes = []
+
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if any(file.lower().endswith(ext) for ext in extensions):
+                filepath = os.path.join(root, file)
+                try:
+                    hashes.append(file_hash(filepath))
+                except Exception as e:
+                    print(f"Error processing file {filepath}: {e}")
+
+    return hashes
+
+
+def is_geoguessr_image(screenshot_path):
+
+    return True
+
+# Checks for two things:
+# 1. If screenshot already exists
+# 2. If screenshot succeeded (for example, exclude loading screens and the likes)
+def is_legal_screenshot(screenshot_path, hashes):
+    print("Checking for valid images")
+    # Check if screenshot already exists
+    img_hash = file_hash(screenshot_path)
+    if img_hash in hashes:
+        print("Screenshot already exists")
+        return False
+    hashes.append(img_hash)
+
+    if not is_geoguessr_image(screenshot_path):
+        print("Not a desired image")
+        return False
+
+    return True
 
 
 def take_screenshot(directory):
@@ -14,12 +65,13 @@ def take_screenshot(directory):
         i += 1
 
     screenshot = ImageGrab.grab(bbox=(0, -1000, 1600, -100))
+
     screenshot_path = os.path.join(directory, f"{i}.png")
     screenshot.save(screenshot_path)
 
     print(f"Screenshot saved to {screenshot_path}")
 
-    return i
+    return i, screenshot_path
 
 
 def simulate_mouse_click(x, y):
@@ -73,102 +125,109 @@ if __name__ == "__main__":
         # ("Wyoming", "https://www.geoguessr.com/maps/62fd6975a425c1c7c196c5fe"),
     # ]
     countries = [
-        ("../countryDataset/Albania", "https://www.geoguessr.com/maps/albania"),
-        ("../countryDataset/Argentina", "https://www.geoguessr.com/maps/argentina"),
-        ("../countryDataset/Australia", "https://www.geoguessr.com/maps/australia"),
-        ("../countryDataset/Austria", "https://www.geoguessr.com/maps/austria"),
-        ("../countryDataset/Bangladesh", "https://www.geoguessr.com/maps/bangladesh"),
-        ("../countryDataset/Belgium", "https://www.geoguessr.com/maps/belgium"),
-        ("../countryDataset/Bhutan", "https://www.geoguessr.com/maps/bhutan"),
-        ("../countryDataset/Bolivia", "https://www.geoguessr.com/maps/bolivia"),
-        ("../countryDataset/Botswana", "https://www.geoguessr.com/maps/botswana"),
-        ("../countryDataset/Brazil", "https://www.geoguessr.com/maps/brazil"),
-        ("../countryDataset/Bulgaria", "https://www.geoguessr.com/maps/bulgaria"),
-        ("../countryDataset/Cambodia", "https://www.geoguessr.com/maps/cambodia"),
-        ("../countryDataset/Canada", "https://www.geoguessr.com/maps/canada"),
-        ("../countryDataset/Chile", "https://www.geoguessr.com/maps/chile"),
-        ("../countryDataset/Colombia", "https://www.geoguessr.com/maps/colombia"),
-        ("../countryDataset/Croatia", "https://www.geoguessr.com/maps/croatia"),
-        ("../countryDataset/Denmark", "https://www.geoguessr.com/maps/denmark"),
-        ("../countryDataset/DominicanRepublic", "https://www.geoguessr.com/maps/dominican-republic"),
-        ("../countryDataset/Ecuador", "https://www.geoguessr.com/maps/ecuador"),
-        ("../countryDataset/Estonia", "https://www.geoguessr.com/maps/estonia"),
-        ("../countryDataset/Eswatini", "https://www.geoguessr.com/maps/eswatini"),
-        ("../countryDataset/Finland", "https://www.geoguessr.com/maps/finland"),
-        ("../countryDataset/France", "https://www.geoguessr.com/maps/france"),
-        ("../countryDataset/Germany", "https://www.geoguessr.com/maps/germany"),
-        ("../countryDataset/Ghana", "https://www.geoguessr.com/maps/ghana"),
-        ("../countryDataset/Greece", "https://www.geoguessr.com/maps/greece"),
-        ("../countryDataset/Guatemala", "https://www.geoguessr.com/maps/guatemala"),
-        ("../countryDataset/Hungary", "https://www.geoguessr.com/maps/hungary"),
-        ("../countryDataset/Iceland", "https://www.geoguessr.com/maps/iceland"),
-        ("../countryDataset/India", "https://www.geoguessr.com/maps/india"),
-        ("../countryDataset/Indonesia", "https://www.geoguessr.com/maps/indonesia"),
-        ("../countryDataset/Ireland", "https://www.geoguessr.com/maps/ireland"),
-        ("../countryDataset/Israel", "https://www.geoguessr.com/maps/israel"),
-        ("../countryDataset/Italy", "https://www.geoguessr.com/maps/italy"),
-        ("../countryDataset/Japan", "https://www.geoguessr.com/maps/japan"),
-        ("../countryDataset/Jordan", "https://www.geoguessr.com/maps/jordan"),
-        ("../countryDataset/Kazakhstan", "https://www.geoguessr.com/maps/kazakhstan"),
-        ("../countryDataset/Kenya", "https://www.geoguessr.com/maps/kenya"),
-        ("../countryDataset/SouthKorea", "https://www.geoguessr.com/maps/south-korea"),
-        ("../countryDataset/Kyrgyzstan", "https://www.geoguessr.com/maps/kyrgyzstan"),
-        ("../countryDataset/Laos", "https://www.geoguessr.com/maps/laos"),
-        ("../countryDataset/Latvia", "https://www.geoguessr.com/maps/latvia"),
-        ("../countryDataset/Lebanon", "https://www.geoguessr.com/maps/lebanon"),
-        ("../countryDataset/Lesotho", "https://www.geoguessr.com/maps/lesotho"),
-        ("../countryDataset/Lithuania", "https://www.geoguessr.com/maps/lithuania"),
-        ("../countryDataset/Luxembourg", "https://www.geoguessr.com/maps/luxembourg"),
-        ("../countryDataset/Madagascar", "https://www.geoguessr.com/maps/madagascar"),
-        ("../countryDataset/Malaysia", "https://www.geoguessr.com/maps/malaysia"),
-        ("../countryDataset/Malta", "https://www.geoguessr.com/maps/malta"),
-        ("../countryDataset/Mexico", "https://www.geoguessr.com/maps/mexico"),
-        ("../countryDataset/Mongolia", "https://www.geoguessr.com/maps/mongolia"),
-        ("../countryDataset/Montenegro", "https://www.geoguessr.com/maps/montenegro"),
-        ("../countryDataset/Netherlands", "https://www.geoguessr.com/maps/netherlands"),
-        ("../countryDataset/NewZealand", "https://www.geoguessr.com/maps/new-zealand"),
-        ("../countryDataset/Nigeria", "https://www.geoguessr.com/maps/nigeria"),
-        ("../countryDataset/NorthMacedonia", "https://www.geoguessr.com/maps/north-macedonia"),
-        ("../countryDataset/Norway", "https://www.geoguessr.com/maps/norway"),
-        ("../countryDataset/Oman", "https://www.geoguessr.com/maps/oman"),
-        ("../countryDataset/Panama", "https://www.geoguessr.com/maps/panama"),
-        ("../countryDataset/Peru", "https://www.geoguessr.com/maps/peru"),
-        ("../countryDataset/Philippines", "https://www.geoguessr.com/maps/philippines"),
-        ("../countryDataset/Poland", "https://www.geoguessr.com/maps/poland"),
-        ("../countryDataset/Portugal", "https://www.geoguessr.com/maps/portugal"),
-        ("../countryDataset/Qatar", "https://www.geoguessr.com/maps/qatar"),
-        ("../countryDataset/Romania", "https://www.geoguessr.com/maps/romania"),
-        ("../countryDataset/Russia", "https://www.geoguessr.com/maps/russia"),
-        ("../countryDataset/Rwanda", "https://www.geoguessr.com/maps/rwanda"),
-        ("../countryDataset/Senegal", "https://www.geoguessr.com/maps/senegal"),
-        ("../countryDataset/Serbia", "https://www.geoguessr.com/maps/serbia"),
-        ("../countryDataset/Singapore", "https://www.geoguessr.com/maps/singapore"),
-        ("../countryDataset/Slovakia", "https://www.geoguessr.com/maps/slovakia"),
-        ("../countryDataset/Slovenia", "https://www.geoguessr.com/maps/slovenia"),
-        ("../countryDataset/SouthAfrica", "https://www.geoguessr.com/maps/south-africa"),
-        ("../countryDataset/Spain", "https://www.geoguessr.com/maps/spain"),
-        ("../countryDataset/Sweden", "https://www.geoguessr.com/maps/sweden"),
-        ("../countryDataset/Switzerland", "https://www.geoguessr.com/maps/switzerland"),
-        ("../countryDataset/Thailand", "https://www.geoguessr.com/maps/thailand"),
-        ("../countryDataset/Tunisia", "https://www.geoguessr.com/maps/tunisia"),
-        ("../countryDataset/Turkey", "https://www.geoguessr.com/maps/Turkey"),
-        ("../countryDataset/Uganda", "https://www.geoguessr.com/maps/uganda"),
-        ("../countryDataset/Ukraine", "https://www.geoguessr.com/maps/ukraine"),
-        ("../countryDataset/UnitedArabEmirates", "https://www.geoguessr.com/maps/uae"),
-        ("../countryDataset/UnitedKingdom", "https://www.geoguessr.com/maps/uk"),
-        ("../countryDataset/USA", "https://www.geoguessr.com/maps/usa"),
-        ("../countryDataset/Uruguay", "https://www.geoguessr.com/maps/uruguay"),
+        # ("../countryDataset/train/Albania", "https://www.geoguessr.com/maps/albania"),
+        # ("../countryDataset/train/Argentina", "https://www.geoguessr.com/maps/argentina"),
+        # ("../countryDataset/train/Australia", "https://www.geoguessr.com/maps/australia"),
+        # ("../countryDataset/train/Austria", "https://www.geoguessr.com/maps/austria"),
+        # ("../countryDataset/train/Bangladesh", "https://www.geoguessr.com/maps/bangladesh"),
+        # ("../countryDataset/train/Belgium", "https://www.geoguessr.com/maps/belgium"),
+        # ("../countryDataset/train/Bhutan", "https://www.geoguessr.com/maps/bhutan"),
+        # ("../countryDataset/train/Bolivia", "https://www.geoguessr.com/maps/bolivia"),
+        # ("../countryDataset/train/Botswana", "https://www.geoguessr.com/maps/botswana"),
+        # ("../countryDataset/train/Brazil", "https://www.geoguessr.com/maps/brazil"),
+        # ("../countryDataset/train/Bulgaria", "https://www.geoguessr.com/maps/bulgaria"),
+        # ("../countryDataset/train/Cambodia", "https://www.geoguessr.com/maps/cambodia"),
+        # ("../countryDataset/train/Canada", "https://www.geoguessr.com/maps/canada"),
+        # ("../countryDataset/train/Chile", "https://www.geoguessr.com/maps/chile"),
+        # ("../countryDataset/train/Colombia", "https://www.geoguessr.com/maps/colombia"),
+        # ("../countryDataset/train/Croatia", "https://www.geoguessr.com/maps/croatia"),
+        # ("../countryDataset/train/Denmark", "https://www.geoguessr.com/maps/denmark"),
+        # ("../countryDataset/train/DominicanRepublic", "https://www.geoguessr.com/maps/dominican-republic"),
+        # ("../countryDataset/train/Ecuador", "https://www.geoguessr.com/maps/ecuador"),
+        ("../countryDataset/train/Estonia", "https://www.geoguessr.com/maps/estonia"),
+        ("../countryDataset/train/Eswatini", "https://www.geoguessr.com/maps/eswatini"),
+        ("../countryDataset/train/Finland", "https://www.geoguessr.com/maps/finland"),
+        ("../countryDataset/train/France", "https://www.geoguessr.com/maps/france"),
+        ("../countryDataset/train/Germany", "https://www.geoguessr.com/maps/germany"),
+        ("../countryDataset/train/Ghana", "https://www.geoguessr.com/maps/ghana"),
+        ("../countryDataset/train/Greece", "https://www.geoguessr.com/maps/greece"),
+        # ("../countryDataset/train/Guatemala", "https://www.geoguessr.com/maps/guatemala"),
+        # ("../countryDataset/train/Hungary", "https://www.geoguessr.com/maps/hungary"),
+        # ("../countryDataset/train/Iceland", "https://www.geoguessr.com/maps/iceland"),
+        # ("../countryDataset/train/India", "https://www.geoguessr.com/maps/india"),
+        # ("../countryDataset/train/Indonesia", "https://www.geoguessr.com/maps/indonesia"),
+        # ("../countryDataset/train/Ireland", "https://www.geoguessr.com/maps/ireland"),
+        # ("../countryDataset/train/Israel", "https://www.geoguessr.com/maps/israel"),
+        # ("../countryDataset/train/Italy", "https://www.geoguessr.com/maps/italy"),
+        # ("../countryDataset/train/Japan", "https://www.geoguessr.com/maps/japan"),
+        # ("../countryDataset/train/Jordan", "https://www.geoguessr.com/maps/jordan"),
+        # ("../countryDataset/train/Kazakhstan", "https://www.geoguessr.com/maps/kazakhstan"),
+        # ("../countryDataset/train/Kenya", "https://www.geoguessr.com/maps/kenya"),
+        # ("../countryDataset/train/SouthKorea", "https://www.geoguessr.com/maps/south-korea"),
+        # ("../countryDataset/train/Kyrgyzstan", "https://www.geoguessr.com/maps/kyrgyzstan"),
+        # ("../countryDataset/train/Laos", "https://www.geoguessr.com/maps/laos"),
+        # ("../countryDataset/train/Latvia", "https://www.geoguessr.com/maps/latvia"),
+        # ("../countryDataset/train/Lebanon", "https://www.geoguessr.com/maps/lebanon"),
+        # ("../countryDataset/train/Lesotho", "https://www.geoguessr.com/maps/lesotho"),
+        # ("../countryDataset/train/Lithuania", "https://www.geoguessr.com/maps/lithuania"),
+        # ("../countryDataset/train/Luxembourg", "https://www.geoguessr.com/maps/luxembourg"),
+        # ("../countryDataset/train/Madagascar", "https://www.geoguessr.com/maps/madagascar"),
+        # ("../countryDataset/Malaysia", "https://www.geoguessr.com/maps/malaysia"),
+        # ("../countryDataset/Malta", "https://www.geoguessr.com/maps/malta"),
+        # ("../countryDataset/Mexico", "https://www.geoguessr.com/maps/mexico"),
+        # ("../countryDataset/Mongolia", "https://www.geoguessr.com/maps/mongolia"),
+        # ("../countryDataset/Montenegro", "https://www.geoguessr.com/maps/montenegro"),
+        # ("../countryDataset/Netherlands", "https://www.geoguessr.com/maps/netherlands"),
+        # ("../countryDataset/NewZealand", "https://www.geoguessr.com/maps/new-zealand"),
+        # ("../countryDataset/Nigeria", "https://www.geoguessr.com/maps/nigeria"),
+        # ("../countryDataset/NorthMacedonia", "https://www.geoguessr.com/maps/north-macedonia"),
+        # ("../countryDataset/Norway", "https://www.geoguessr.com/maps/norway"),
+        # ("../countryDataset/Oman", "https://www.geoguessr.com/maps/oman"),
+        # ("../countryDataset/Panama", "https://www.geoguessr.com/maps/panama"),
+        # ("../countryDataset/Peru", "https://www.geoguessr.com/maps/peru"),
+        # ("../countryDataset/Philippines", "https://www.geoguessr.com/maps/philippines"),
+        # ("../countryDataset/Poland", "https://www.geoguessr.com/maps/poland"),
+        # ("../countryDataset/Portugal", "https://www.geoguessr.com/maps/portugal"),
+        # ("../countryDataset/Qatar", "https://www.geoguessr.com/maps/qatar"),
+        # ("../countryDataset/Romania", "https://www.geoguessr.com/maps/romania"),
+        # ("../countryDataset/Russia", "https://www.geoguessr.com/maps/russia"),
+        # ("../countryDataset/Rwanda", "https://www.geoguessr.com/maps/rwanda"),
+        # ("../countryDataset/Senegal", "https://www.geoguessr.com/maps/senegal"),
+        # ("../countryDataset/Serbia", "https://www.geoguessr.com/maps/serbia"),
+        # ("../countryDataset/Singapore", "https://www.geoguessr.com/maps/singapore"),
+        # ("../countryDataset/Slovakia", "https://www.geoguessr.com/maps/slovakia"),
+        # ("../countryDataset/Slovenia", "https://www.geoguessr.com/maps/slovenia"),
+        # ("../countryDataset/SouthAfrica", "https://www.geoguessr.com/maps/south-africa"),
+        # ("../countryDataset/Spain", "https://www.geoguessr.com/maps/spain"),
+        # ("../countryDataset/Sweden", "https://www.geoguessr.com/maps/sweden"),
+        # ("../countryDataset/Switzerland", "https://www.geoguessr.com/maps/switzerland"),
+        # ("../countryDataset/Thailand", "https://www.geoguessr.com/maps/thailand"),
+        # ("../countryDataset/Tunisia", "https://www.geoguessr.com/maps/tunisia"),
+        # ("../countryDataset/Turkey", "https://www.geoguessr.com/maps/Turkey"),
+        # ("../countryDataset/Uganda", "https://www.geoguessr.com/maps/uganda"),
+        # ("../countryDataset/Ukraine", "https://www.geoguessr.com/maps/ukraine"),
+        # ("../countryDataset/UnitedArabEmirates", "https://www.geoguessr.com/maps/uae"),
+        # ("../countryDataset/UnitedKingdom", "https://www.geoguessr.com/maps/uk"),
+        # ("../countryDataset/USA", "https://www.geoguessr.com/maps/usa"),
+        # ("../countryDataset/Uruguay", "https://www.geoguessr.com/maps/uruguay"),
     ]
 
-    num_images = 310
+    num_images = 500
     for country, map_url in countries:
         s = time.perf_counter()
         os.makedirs(country, exist_ok=True)
 
+        hashes = get_image_hashes(country)
 
         for counter in range(1, num_images+1):
-            pyautogui.moveTo(MAP_X, CENTER_Y, duration=0.1)  # Prevent map opening again
-            num_existing_screens = take_screenshot(country)
+            # Prevent map opening again due to mouse hovering on top
+            pyautogui.moveTo(MAP_X, CENTER_Y, duration=0.1)
+            num_existing_screens, screenshot_path = take_screenshot(country)
+
+            if not is_legal_screenshot(screenshot_path, hashes):
+                os.remove(screenshot_path)
+                num_existing_screens -= 1
+
             if num_existing_screens >= num_images:
                 break
 
@@ -191,7 +250,7 @@ if __name__ == "__main__":
                 pyautogui.press("space")
 
             simulate_mouse_click(CENTER_X, CENTER_Y)
-            time.sleep(0.9)  # Wait for next round
+            time.sleep(0.3)  # Wait for next round
 
         time_taken = round(time.perf_counter() - s, 3)
         print(f"Took {time_taken}s")
