@@ -51,8 +51,7 @@ def get_dataloaders(root_dir="dataset/", batch_size=16):
 
     return train_loader, test_loader, len(train_dataset.classes)
 
-
-def get_net(num_classes, resnet="resnet50", dropout_rate=0.5):
+def get_resnet(num_classes, resnet, dropout_rate):
     if resnet == "resnet18":
         weights = torchvision.models.ResNet18_Weights.DEFAULT
         resnet_model = torchvision.models.resnet18
@@ -81,6 +80,65 @@ def get_net(num_classes, resnet="resnet50", dropout_rate=0.5):
     torch.nn.init.xavier_uniform_(net.fc[1].weight)
 
     return net
+
+def get_vit(num_classes, net_name, dropout_rate):
+    if net_name == "vit_b_16":
+        weights = torchvision.models.vision_transformer.ViT_B_16_Weights.DEFAULT
+        vit_model = torchvision.models.vision_transformer.vit_b_16
+    elif net_name == "vit_b_32":
+        weights = torchvision.models.vision_transformer.ViT_B_32_Weights.DEFAULT
+        vit_model = torchvision.models.vision_transformer.vit_b_32
+    elif net_name == "vit_l_16":
+        weights = torchvision.models.vision_transformer.ViT_L_16_Weights.DEFAULT
+        vit_model = torchvision.models.vision_transformer.vit_l_16
+    else:
+        print(f"{net_name} not supported")
+        exit(0)
+
+    net = vit_model(weights=weights)
+
+    net.heads.head = torch.nn.Sequential(
+        torch.nn.Dropout(dropout_rate),
+        torch.nn.Linear(net.heads.head.in_features, num_classes),
+    )
+    torch.nn.init.xavier_uniform_(net.heads.head[1].weight)
+
+    return net
+
+
+def get_efficientnet(num_classes, net_name, dropout_rate):
+    if net_name == "efficientnet_b0":
+        weights = torchvision.models.efficientnet.EfficientNet_B0_Weights.DEFAULT
+        efficientnet_model = torchvision.models.efficientnet_b0
+    elif net_name == "efficientnet_b1":
+        weights = torchvision.models.efficientnet.EfficientNet_B1_Weights.DEFAULT
+        efficientnet_model = torchvision.models.efficientnet_b1
+    elif net_name == "efficientnet_b2":
+        weights = torchvision.models.efficientnet.EfficientNet_B2_Weights.DEFAULT
+        efficientnet_model = torchvision.models.efficientnet_b2
+    else:
+        print(f"{net_name} not supported")
+        exit(0)
+
+    net = efficientnet_model(weights=weights)
+
+    net.classifier[1] = torch.nn.Linear(net.classifier[1].in_features, num_classes)
+    net.classifier.add_module("dropout", torch.nn.Dropout(dropout_rate))
+    torch.nn.init.xavier_uniform_(net.classifier[1].weight)
+
+    return net
+
+
+def get_net(num_classes, net_name="resnet50", dropout_rate=0.5):
+    if "resnet" in net_name:
+        return get_resnet(num_classes, net_name, dropout_rate)
+    elif "vit" in net_name:
+        return get_vit(num_classes, net_name, dropout_rate)
+    elif "efficientnet" in net_name:
+        return get_efficientnet(num_classes, net_name, dropout_rate)
+    else:
+        print(f"{net_name} not supported")
+        exit(0)
 
 
 def correct_predictions(output, target, topk=(1,)):
@@ -187,8 +245,8 @@ def train(
 
 
 def objective(trial):
-    resnet = "resnet34"
-    lr = 5.271243178881065e-5
+    net_name = "resnet34"
+    lr = trial.suggest_float("lr", 1e-6, 1e-2, log=True)
     dropout_rate = trial.suggest_float("dropout_rate", 0.25, 0.65)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-4, log=True)
     use_scheduler = trial.suggest_categorical("use_scheduler", [True, False])
@@ -209,17 +267,52 @@ def objective(trial):
     train_loader, test_loader, num_classes = get_dataloaders(
         root_dir="countryDataset/", batch_size=256
     )
-    net = get_net(num_classes, resnet=resnet, dropout_rate=dropout_rate).to(device)
+    num_classes = 85
+    net = get_net(num_classes, net_name=net_name, dropout_rate=dropout_rate).to(device)
     criterion = torch.nn.CrossEntropyLoss()
-    params_1x = [
-        param for name, param in net.named_parameters() if "fc" not in str(name)
-    ]
-    optimizer = torch.optim.Adam(
-        [{"params": params_1x}, {"params": net.fc.parameters(), "lr": lr * 10}],
-        lr=lr,
-        weight_decay=weight_decay,
-    )
-    filepath = f"{resnet}_lr_{lr}_wd_{weight_decay}_scheduler_{use_scheduler}_stepsize_{scheduler_step_size}_gamma_{scheduler_gamma}_dropout_{dropout_rate}.csv"
+
+    if "resnet" in net_name:
+        params_1x = [
+            param for name, param in net.named_parameters() if "fc" not in str(name)
+        ]
+        optimizer = torch.optim.Adam(
+            [
+                {"params": params_1x},
+                {"params": net.fc.parameters(), "lr": lr * 10},
+            ],
+            lr=lr,
+            weight_decay=weight_decay,
+        )
+    elif "vit" in net_name:
+        params_1x = [
+            param
+            for name, param in net.named_parameters()
+            if "head" not in str(name)
+        ]
+        optimizer = torch.optim.Adam(
+            [
+                {"params": params_1x},
+                {"params": net.heads.head.parameters(), "lr": lr * 10},
+            ],
+            lr=lr,
+            weight_decay=weight_decay,
+        )
+    elif "efficientnet" in net_name:
+        params_1x = [
+            param
+            for name, param in net.named_parameters()
+            if "classifier" not in str(name)
+        ]
+        optimizer = torch.optim.Adam(
+            [
+                {"params": params_1x},
+                {"params": net.classifier.parameters(), "lr": lr * 10},
+            ],
+            lr=lr,
+            weight_decay=weight_decay,
+        )
+
+    filepath = f"{net_name}_lr_{lr}_wd_{weight_decay}_scheduler_{use_scheduler}_stepsize_{scheduler_step_size}_gamma_{scheduler_gamma}_dropout_{dropout_rate}.csv"
     scheduler = None
     if use_scheduler:
         scheduler = torch.optim.lr_scheduler.StepLR(
