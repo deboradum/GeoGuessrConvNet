@@ -69,7 +69,7 @@ def is_desired_image(screenshot_path):
         output = model(image)
         probability = torch.sigmoid(output).item()
 
-    return probability >= 0.5
+    return probability >= 0.75
 
 
 # Checks for two things:
