@@ -244,7 +244,7 @@ def train(
 
 def objective(trial):
     net_name = "resnet50"
-    lr = trial.suggest_float("lr", 0.0001, 0.00001, log=True)
+    lr = trial.suggest_float("lr", 0.00001, 0.0001, log=True)
     dropout_rate = trial.suggest_float("dropout_rate", 0.45, 0.65)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-4, log=True)
     use_scheduler = trial.suggest_categorical("use_scheduler", [True, False])

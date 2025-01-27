@@ -13,3 +13,5 @@ __pycache__/
 *.tar.gz
 
 !images/*
+runs/
+*.csv
